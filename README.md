@@ -1,164 +1,159 @@
-# Multilingual Speech-to-Speech Translation
+<div align="center">
 
-A Python speech-to-speech translation system built with a cascaded machine-learning pipeline:
+#  Multilingual Speech-to-Speech Translation
 
-1. **Automatic speech recognition (ASR):** Faster-Whisper (`small`).
-2. **Machine translation (MT):** Meta NLLB-200 (`facebook/nllb-200-distilled-600M`).
-3. **Text-to-speech (TTS):** Meta MMS language models using VITS.
+###  Speak in one language → 🔊 Hear it in another
 
-The project supports an HTTP API, a WebSocket audio bridge, real-time microphone translation,
-and local audio-file testing.
+![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white&style=for-the-badge)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white&style=for-the-badge)
+![PyTorch](https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white&style=for-the-badge)
+![Whisper](https://img.shields.io/badge/Whisper-ASR-412991?style=for-the-badge)
+![NLLB](https://img.shields.io/badge/NLLB--200-MT-0668E1?style=for-the-badge)
+![MMS](https://img.shields.io/badge/MMS-TTS-1877F2?style=for-the-badge)
 
-## Project structure
+**Real-time • REST API • WebSocket • 200-language translation**
 
-```text
-Multilingual_System/
-├── pipeline.py       # ASR, translation, TTS and orchestration
-├── server.py         # FastAPI HTTP and WebSocket service
-├── realtime_mic.py   # Continuous microphone translation with Silero VAD
-├── test_local.py    # Translate a local WAV file
-├── test_mic.py      # Record and translate a microphone sample
-├── requirements.txt # Python dependencies
-├── pyproject.toml    # Formatter and linter configuration
-└── .gitignore
+</div>
+
+---
+
+## What it does
+
+|  Listen |  Translate |  Speak |
+|:---:|:---:|:---:|
+| Faster-Whisper | NLLB-200 | Meta MMS-TTS |
+| Speech → text | Text → text | Text → speech |
+
+-  **Live mic mode** with Silero VAD: just talk, pause, and hear the translation
+-  **Hindi, Malayalam, English, French, Spanish** out of the box (easily extendable)
+-  **Auto GPU/CPU**, with int8 quantization on CPU
+-  **Hands-free stop**: say *"stop translation"* or press `q`
+
+##  How it works
+
+```mermaid
+flowchart LR
+    A[ Audio in] --> B[Faster-Whisper<br/>ASR]
+    B -->|text| C[NLLB-200<br/>Translate]
+    C -->|text| D[MMS-TTS<br/>Synthesize]
+    D --> E[ Audio out]
 ```
 
-## Requirements
-
-- Python 3.10 or newer
-- A working audio input/output device for microphone mode
-- FFmpeg may be required by the local Faster-Whisper/CTranslate2 installation, depending on platform
-- Internet access on first run to download the Hugging Face model files
-- A CUDA-compatible PyTorch installation is optional; CPU execution is supported but slower
-
-> Model weights are downloaded by the libraries at runtime. They are not stored in this repository.
-
-## Installation
-
-### 1. Create a virtual environment
-
-**Windows (PowerShell):**
-
-```powershell
-py -3.10 -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-**Linux/macOS:**
+##  Quick Start
 
 ```bash
+git clone https://github.com/<your-username>/<your-repo>.git
+cd <your-repo>
+
 python3 -m venv .venv
-source .venv/bin/activate
-```
+source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 
-### 2. Install dependencies
-
-```bash
-python -m pip install --upgrade pip
 pip install -r requirements.txt
+python realtime_mic.py           #  start talking!
 ```
 
-Install the PyTorch and torchaudio builds appropriate for your operating system and CUDA version
-if the default pip packages are not suitable for your hardware. See the official PyTorch installation
-selector for the correct command.
+>  Model weights download automatically on first run. Using a GPU? Install the matching `torch` build from [pytorch.org](https://pytorch.org/get-started/locally/) first.
 
-## Run the project
+##  Ways to use it
 
-### FastAPI server
+| Mode | Command | What you get |
+|---|---|---|
+|  **Live mic** | `python realtime_mic.py` | Continuous real-time translation |
+|  **Mic test** | `python test_mic.py` | Record 5s → `live_translated_output.wav` |
+|  **File test** | `python test_local.py` | `harvard.wav` → `translated_output.wav` |
+|  **API server** | `uvicorn server:app --port 8000` | REST + WebSocket on `localhost:8000` |
 
-```bash
-uvicorn server:app --host 0.0.0.0 --port 8000
-```
+###  API
 
-Open the interactive API documentation at `http://127.0.0.1:8000/docs`.
-
-Endpoints:
+Docs live at **http://127.0.0.1:8000/docs**
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/health` | Basic service health check |
-| POST | `/translate-audio` | Upload audio and receive translated WAV audio |
-| WebSocket | `/ws/audio` | Send audio frames and receive synthesized audio frames |
-
-The HTTP endpoint accepts multipart form fields `audio_file`, `target_lang` (default `hin_Deva`),
-and `tts_code` (default `hin`). Transcript and translation text are returned in the
-`X-Transcript` and `X-Translation` response headers using URL encoding.
-
-The WebSocket endpoint currently uses Hindi as its target language, matching the original
-implementation.
-
-### Local audio-file test
-
-Place a WAV file named `harvard.wav` in the project root, then run:
+| `GET` | `/health` | Health check |
+| `POST` | `/translate-audio` | Upload audio → translated WAV |
+| `WS` | `/ws/audio` | Stream audio in/out (English → Hindi) |
 
 ```bash
-python test_local.py
+curl -X POST http://127.0.0.1:8000/translate-audio \
+  -F "audio_file=@input.wav" \
+  -F "target_lang=hin_Deva" \
+  -F "tts_code=hin" \
+  --output translated.wav
 ```
 
-Edit `SOURCE_LANGUAGE`, `TARGET_NLLB_LANGUAGE` and `TARGET_TTS_LANGUAGE` at the top of the file
-to select the language pair. The generated output is written to `translated_output.wav`.
+Transcript and translation come back URL-encoded in the `X-Transcript` and `X-Translation` headers.
 
-### Microphone test
+##  Languages
 
-```bash
-python test_mic.py
+| Language | Short | NLLB code | TTS code |
+|---|:---:|:---:|:---:|
+| 🇬🇧 English | `en` | `eng_Latn` | `eng` |
+| 🇮🇳 Hindi | `hi` | `hin_Deva` | `hin` |
+| 🇮🇳 Malayalam | `ml` | `mal_Mlym` | `mal` |
+| 🇫🇷 French | `fr` | `fra_Latn` | `fra` |
+| 🇪🇸 Spanish | `es` | `spa_Latn` | `spa` |
+
+Want another language? Add it to `LANG_MAP` in `pipeline.py` and use its [NLLB](https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200) and [MMS-TTS](https://huggingface.co/facebook/mms-tts) codes.
+
+<details>
+<summary> <b>Configuration</b></summary>
+
+<br>
+
+| Setting (`pipeline.py`) | Default | Notes |
+|---|---|---|
+| `WHISPER_SIZE` | `small` | `tiny` / `base` / `small` |
+| `NLLB_MODEL` | `facebook/nllb-200-distilled-600M` | Translation model |
+| `NUM_BEAMS` | `2` | Beam width |
+| `QUANTIZE_NLLB_ON_CPU` | `True` | int8 on CPU |
+
+For live mic mode, edit `SOURCE_LANG`, `TARGET_NLLB` and `TARGET_TTS` at the top of `realtime_mic.py`.
+
+</details>
+
+<details>
+<summary> <b>Project structure</b></summary>
+
+```text
+├── pipeline.py        # ASR + translation + TTS
+├── server.py          # FastAPI HTTP + WebSocket
+├── realtime_mic.py    # Live mic with Silero VAD
+├── test_local.py      # Translate a WAV file
+├── test_mic.py        # Record & translate
+├── requirements.txt
+└── pyproject.toml     # Black / Ruff config
 ```
 
-The script records a short sample, processes it and writes `live_translated_output.wav`.
+</details>
 
-### Continuous real-time microphone translation
-
-```bash
-python realtime_mic.py
-```
-
-Speak a sentence and pause to submit it for translation. Say **“stop translation”** or type **q**
-and press Enter to stop. Configure the source and target language constants near the top of
-`realtime_mic.py` before running.
-
-## Language configuration
-
-The source-language map used by the translation model is defined in `pipeline.py`:
-
-| Short code | NLLB language code |
-|---|---|
-| `en` | `eng_Latn` |
-| `ml` | `mal_Mlym` |
-| `hi` | `hin_Deva` |
-| `fr` | `fra_Latn` |
-| `es` | `spa_Latn` |
-
-The NLLB target language identifier and MMS TTS language suffix are separate values. For example,
-Malayalam uses `mal_Mlym` for NLLB and `mal` for MMS TTS; Hindi uses `hin_Deva` and `hin`.
-
-## Performance notes
-
-- The first startup can take time because model files are downloaded and loaded into memory.
-- GPU execution is selected automatically when CUDA is available; otherwise CPU mode is used.
-- CPU NLLB dynamic quantization is enabled by default in `pipeline.py`.
-- TTS models are loaded on demand and cached by language for subsequent requests.
-
-## Development quality checks
-
-Install the optional tools and run the formatter/linter:
+<details>
+<summary> <b>Development</b></summary>
 
 ```bash
 pip install black ruff
 black --check .
 ruff check .
-```
-
-Compile all Python files without loading ML models:
-
-```bash
 python -m compileall -q .
 ```
 
-## Important notes
+</details>
 
-- The project retains the original ASR -> NLLB translation -> MMS TTS architecture and default model choices.
-- This is a development baseline, not a production-hardened public service. Before exposing the API
-  to the internet, add authentication, upload-size limits, request timeouts, rate limiting, and
-  deployment-specific model-worker management.
-- The current source-language detection value is the configured `source_lang`; Faster-Whisper is
-  instructed to use that language rather than performing automatic language detection.
+##  Heads up
+
+- Source language is **set manually**, not auto-detected.
+- `/translate-audio` and `/ws/audio` assume **English** input.
+- Development baseline, **not production-ready**. Add auth, upload limits, timeouts and rate limiting before exposing it publicly.
+
+##  Built with
+
+[Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) · [NLLB-200](https://github.com/facebookresearch/fairseq/tree/nllb) · [Meta MMS](https://github.com/facebookresearch/fairseq/tree/main/examples/mms) · [Silero VAD](https://github.com/snakers4/silero-vad) · [FastAPI](https://fastapi.tiangolo.com/)
+
+> Model weights have their own licenses (NLLB-200 and MMS are CC-BY-NC 4.0). Check before commercial use.
+
+## 📄 License
+
+Add a `LICENSE` file and name it here.
+
+---
+
+<div align="center">⭐ If this helped you, give it a star!</div>
